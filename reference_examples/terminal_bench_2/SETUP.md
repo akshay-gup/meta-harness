@@ -1,6 +1,6 @@
 # Terminal-Bench 2 Setup
 
-This directory is the paper reference scaffold for Terminal-Bench 2.0. The shipped scripts target Harbor with the `runloop` environment:
+This directory contains the Terminal-Bench 2 reference experiment from the paper. The shipped scripts use Harbor with the `runloop` environment:
 
 ```bash
 uv run harbor run ... -d "terminal-bench@2.0" -e runloop
@@ -8,7 +8,7 @@ uv run harbor run ... -d "terminal-bench@2.0" -e runloop
 
 ## Requirements
 
-- A working Anthropic API key.
+- `ANTHROPIC_API_KEY` and `RUNLOOP_API_KEY` for the shipped path.
 - A Runloop/Daytona account with enough sandbox quota for the concurrency you plan to use.
 - The `terminal-bench` package installed from this directory's `pyproject.toml`.
 - Python 3.12.
@@ -27,11 +27,11 @@ The repo root ships `.env.example`, but the shell wrappers in `scripts/` source 
 - Put the same `.env` file in this directory, or
 - Export the needed variables in your shell before running the scripts.
 
-As shipped, the code expects at least `ANTHROPIC_API_KEY`. `RUNLOOP_API_KEY` is also required for the shipped `runloop` path. Running through runloop is highly recommended for large-scale runs.
+The shipped `runloop` path requires both `ANTHROPIC_API_KEY` and `RUNLOOP_API_KEY`. For larger runs, `runloop` is the intended path.
 
 The default model in this example is `anthropic/claude-opus-4-6`. Override `HARBOR_MODEL` only if you intentionally want a non-default config.
 
-The practical default concurrency in this release is `50`. This setup is sensitive to Anthropic API throughput: API tier matters, sharing the same API key with other active projects makes runs slower, and many apparent task failures at higher concurrency are actually timeout failures rather than reasoning failures.
+Default concurrency in this release is `50`. This setup is sensitive to Anthropic API throughput: API tier matters, sharing the same API key with other active projects makes runs slower, and many apparent failures at higher concurrency are actually timeout failures rather than reasoning failures.
 
 ## Task Set
 
@@ -60,7 +60,7 @@ Hard-subset example:
 uv run bash scripts/run_eval.sh agents.baseline_kira:AgentHarness hard 1 50
 ```
 
-The shell wrappers use `timeout` when available and fall back to `gtimeout` if GNU coreutils is installed on macOS. If neither command is present, the Harbor run still works but will not have an outer wall-clock timeout.
+The shell wrappers use `timeout` when available and fall back to `gtimeout` if GNU coreutils is installed on macOS. If neither command is present, the Harbor run still works but has no outer wall-clock timeout.
 
 ## Local Vs Remote Sandbox
 

@@ -1,6 +1,6 @@
 # Terminal-Bench 2
 
-Paper reference experiment for Meta-Harness on Terminal-Bench 2.0. The default search config uses Harbor on the full 89-task TB2 dataset with 2 trials per task on Opus 4.6, matching the intended paper-style search setup in this release.
+Terminal-Bench 2 reference experiment for Meta-Harness. The default search config in this release uses Harbor on the full 89-task TB2 dataset, with 2 search trials per task on Opus 4.6.
 
 ## Quick Start
 
@@ -35,7 +35,16 @@ Run one evolve iteration with the default full-dataset search config:
 uv run python meta_harness.py --iterations 1
 ```
 
-Add `--full-eval` if you also want the optional 5-trial winner pass on the full dataset.
+Pass `--full-eval` if you also want the optional 5-trial winner pass on the full dataset.
+
+## Repro And Troubleshooting
+
+- The shipped `runloop` path requires both `ANTHROPIC_API_KEY` and `RUNLOOP_API_KEY`.
+- The default paper-style config in this release is Opus 4.6, `full`, `89` tasks, `2` search trials, and concurrency `50`.
+- Anthropic API tier matters for both speed and failure rate.
+- Sharing the same Anthropic API key with other active projects can make runs substantially slower.
+- Many failures at higher concurrency are timeout failures caused by insufficient API throughput, not necessarily reasoning failures.
+- The recommended bring-up order is `extract-elf`, then `hard`, then the full default run.
 
 ## Key Files
 
@@ -45,8 +54,6 @@ Add `--full-eval` if you also want the optional 5-trial winner pass on the full 
 
 ## Runtime And Cost
 
-With Opus 4.6 and a high-tier API key, the default 89x2 search run at concurrency `50` takes about 4-6 hours and costs roughly $500 _for each iteration_. The recommended bring-up path is to first smoke-test a candidate on the `extract-elf` task, then run the cheaper 30-task `hard` subset (which still contains plenty of signal for evaluation), and finally move to the full default run with all 89 tasks.
+With Opus 4.6 and a high-tier API key, the default 89x2 search run at concurrency `50` takes about 4-6 hours and costs roughly $500 _per iteration_. The recommended bring-up path is `extract-elf`, then `hard`, then the full default run.
 
-This setup is sensitive to concurrency and Anthropic API throughput. API tier matters, and sharing the same API key with other active projects can make runs much slower. Many task failures under an otherwise reasonable scaffold are just timeout failures caused by insufficient API throughput at the chosen concurrency.
-
-This is a cleaned-up version of the code we used for the paper. Please let us know if anything goes wrong.
+This setup is sensitive to concurrency and Anthropic API throughput. API tier matters, and sharing the same API key with other active projects can make runs much slower. Many failures at higher concurrency are timeout failures caused by insufficient API throughput at the chosen setting.
