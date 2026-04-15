@@ -27,9 +27,11 @@ The repo root ships `.env.example`, but the shell wrappers in `scripts/` source 
 - Put the same `.env` file in this directory, or
 - Export the needed variables in your shell before running the scripts.
 
-As shipped, the code expects at least `ANTHROPIC_API_KEY`. Running through runloop is highly recommended for large-scale runs.
+As shipped, the code expects at least `ANTHROPIC_API_KEY`. `RUNLOOP_API_KEY` is also required for the shipped `runloop` path. Running through runloop is highly recommended for large-scale runs.
 
 The default model in this example is `anthropic/claude-opus-4-6`. Override `HARBOR_MODEL` only if you intentionally want a non-default config.
+
+The practical default concurrency in this release is `50`. This setup is sensitive to Anthropic API throughput: API tier matters, sharing the same API key with other active projects makes runs slower, and many apparent task failures at higher concurrency are actually timeout failures rather than reasoning failures.
 
 ## Task Set
 
@@ -55,7 +57,7 @@ For new harness ideas, do not start with the default 89x2 search loop.
 Hard-subset example:
 
 ```bash
-uv run bash scripts/run_eval.sh agents.baseline_kira:AgentHarness hard 1 10
+uv run bash scripts/run_eval.sh agents.baseline_kira:AgentHarness hard 1 50
 ```
 
 The shell wrappers use `timeout` when available and fall back to `gtimeout` if GNU coreutils is installed on macOS. If neither command is present, the Harbor run still works but will not have an outer wall-clock timeout.

@@ -507,7 +507,6 @@ def render_task_prompt(iteration, n_trials):
         f"Start from agents/baseline_kira.py as the parent.\n\n"
         f"## Eval split: {N_EVAL_TASKS} official TB2 tasks x {n_trials} trials\n\n"
         f"This reference example uses the full TB2 dataset from the paper runs. "
-        f"The shipped artifact starts from a 28.1% KIRA baseline and reached 46.5% on this split. "
         f"Focus on scaffold changes that help the agent solve complex, long-horizon tasks.\n\n"
         f"## Run directories\n"
         f"All logs and results for this run are under `{LOGS_DIR}/`.\n"

@@ -6,7 +6,7 @@ set -euo pipefail
 AGENT_IMPORT_PATH="${1:?Usage: $0 <agent_import_path> [task_set] [runs] [n_concurrent] [extra_harbor_flags...]}"
 TASK_SET="${2:-full}"
 RUNS="${3:-2}"
-N_CONCURRENT="${4:-100}"
+N_CONCURRENT="${4:-50}"
 shift "$(( $# < 4 ? $# : 4 ))"
 EXTRA_FLAGS=("$@")
 
