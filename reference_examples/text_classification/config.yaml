@@ -1,17 +1,16 @@
 # Dataset split sizes — full datasets
 dataset:
-  num_train: 200
-  num_val: 50
-  num_test: 100
+  num_train: 0
+  num_val: 3
+  num_test: 2
   overrides:
-    # MCE tasks: use full official splits
-    USPTO:                     {num_train: 50, num_val: 30, num_test: 100}
-    Symptom2Disease:           {num_train: 200, num_val: 50, num_test: 212}
-    LawBench:                  {num_train: 200, num_val: 50, num_test: 100}
+    # Replace data/form_filling.jsonl with your own examples, then set these
+    # counts to match your desired train/validation/test split.
+    FormFilling:               {num_train: 0, num_val: 3, num_test: 2}
 
 # Inner loop settings
 inner_loop:
-  mode: offline      # "online" or "offline"
+  mode: online       # "online" or "offline"
   num_epochs: 1      # For offline mode: 1 epoch for local server speed (was 5)
   temperature: 0.0   # LLM temperature (null = model default)
   eval_interval: 0   # 0 = no intermediate evals
@@ -32,13 +31,10 @@ benchmark:
 
 # Datasets to test
 datasets:
-  - USPTO
-  - Symptom2Disease
-  - LawBench
+  - FormFilling
 
 # Memory systems to test
 memory_systems:
   baselines:
     - no_memory
-    - fewshot_all
   proposed: []  # meta_harness.py writes candidate files into agents/ at runtime

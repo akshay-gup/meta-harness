@@ -16,18 +16,21 @@ from typing import Any
 from ..llm import LLMCallable
 from ..memory_system import MemorySystem, extract_json_field
 
-PROMPT_TEMPLATE = """Solve the problem below based on the examples provided.
+PROMPT_TEMPLATE = """Fill the requested form or produce the requested structured output based on the examples provided.
 
 {examples_section}
 
-**Problem:**
+**Input:**
 {input}
 
 **Instructions:**
-- Follow the patterns shown in the examples above
-- Respond in JSON format
+- Follow the completed-state patterns shown in the examples above
+- Return the completed form state in `final_answer`
+- Use the output state shape provided in the input when present
+- Do not return the blank input template or template metadata
+- Respond using the wrapper below
 
-{{"reasoning": "[your reasoning]", "final_answer": "[your answer]"}}"""
+{{"reasoning": "[brief reasoning]", "final_answer": {{"completed": "form state"}}}}"""
 
 MAX_CHARS = 30000
 
@@ -91,7 +94,7 @@ class FewShotMemory(MemorySystem):
         )
 
         response = self.call_llm(prompt)
-        answer = extract_json_field(response, "final_answer")
+        answer = extract_json_field(response, "final_answer") or response
 
         return answer, {
             "full_response": response,

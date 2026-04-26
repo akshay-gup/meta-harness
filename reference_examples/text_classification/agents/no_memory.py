@@ -5,14 +5,18 @@ from typing import Any
 from ..llm import LLMCallable
 from ..memory_system import MemorySystem, extract_json_field
 
-PROMPT = """Answer the following question.
+PROMPT = """Fill the requested form or produce the requested structured output.
 
 {input}
 
+Return the completed form state in `final_answer`. Use the output state shape
+provided in the input when present. Do not return the blank input template or
+template metadata such as component/title/config/options.
+
 **Answer in this exact JSON format:**
 {{
-  "reasoning": "[Your chain of thought / reasoning process]",
-  "final_answer": "[Your concise final answer here]"
+  "reasoning": "[brief reasoning]",
+  "final_answer": {{"completed": "form state"}}
 }}
 """
 
@@ -26,7 +30,7 @@ class NoMemory(MemorySystem):
 
     def predict(self, input: str) -> tuple[str, dict[str, Any]]:
         response = self.call_llm(PROMPT.format(input=input))
-        answer = extract_json_field(response, "final_answer")
+        answer = extract_json_field(response, "final_answer") or response
         return answer, {"full_response": response}
 
     def learn_from_batch(self, batch_results: list[dict[str, Any]]) -> None:

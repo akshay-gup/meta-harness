@@ -9,6 +9,8 @@ Run ONE iteration of memory system evolution. Do all work in the main session �
 
 **You do NOT run benchmarks.** You analyze results + prediction traces, prototype changes, and implement new systems. The outer loop (`meta_harness.py`) handles benchmarking separately.
 
+The default benchmark in this release is form filling: given source text and a list of fields, output the completed form. Optimize for required field correctness first. JSON is preferred, but the evaluator also accepts Markdown/plain key-value forms when the required field values are correct.
+
 ## CRITICAL CONSTRAINTS
 
 - You MUST implement 3 new memory systems every iteration.
@@ -22,10 +24,10 @@ The most common failure mode is creating systems that are just parameter variant
 
 **Good candidates change a fundamental mechanism:**
 
-- A new retrieval algorithm (e.g. contrastive pairs, diversity-aware selection, graph-based traversal)
-- A new prompt architecture (e.g. organize by confusion clusters instead of listing examples sequentially)
-- A new learning strategy (e.g. LLM-generated lesson summaries instead of raw example storage)
-- A new memory structure (e.g. separate fast/slow pools, hierarchical organization, compressed representations)
+- A new retrieval algorithm (e.g. source-similar examples, field-specific examples, contrastive examples)
+- A new prompt architecture (e.g. organize context by form fields instead of listing examples sequentially)
+- A new learning strategy (e.g. LLM-generated field extraction lessons instead of raw example storage)
+- A new memory structure (e.g. separate memories for field hints, examples, and common normalization patterns)
 
 **Bad candidates just tune numbers.** If the logic in `predict()` and `learn_from_batch()` is identical to the base except for constants, it's a parameter variant. Rewrite with a genuinely novel mechanism.
 
@@ -37,7 +39,7 @@ Exploitation axes: A=Prompt template, B=Memory content, C=Selection algorithm, D
 
 - **No dataset-specific hints.** Do not hardcode knowledge about specific datasets. Memory systems must be general-purpose.
 - **Never mention dataset names** in system code, prompts, or comments.
-- **General patterns are OK.** Rules like "prioritize recent errors" or "balance label coverage" are fine — they apply broadly.
+- **General patterns are OK.** Rules like "prioritize recent errors" or "cover every required field" are fine — they apply broadly.
 
 ## WORKFLOW
 
@@ -114,7 +116,7 @@ class MemorySystem(ABC):
 
 - Extend `MemorySystem` from `..memory_system`
 - Import `LLMCallable` from `..llm`, `extract_json_field` from `..memory_system`
-- Use `extract_json_field(response, "final_answer")` for answer extraction (NOT custom regex)
+- Use `extract_json_field(response, "final_answer") or response` for answer extraction (NOT custom regex)
 - Use `self.call_llm(prompt)` for LLM calls (NOT `self._llm` directly)
 - `predict` must work without any prior learning (cold start)
 - `learn_from_batch` receives list of dicts with keys: input, prediction, ground_truth, was_correct, metadata
