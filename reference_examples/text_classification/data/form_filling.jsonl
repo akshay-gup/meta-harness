@@ -1,0 +1,5 @@
+{"input_path": "transcripts/case_001.txt", "schema_path": "schemas/lymphoma_6.json", "target_path": "targets/case_001.filled.json"}
+{"input_path": "transcripts/case_002.txt", "schema_path": "schemas/lymphoma_6.json", "target_path": "targets/case_002.filled.json"}
+{"input_path": "transcripts/case_003.txt", "schema_path": "schemas/lymphoma_6.json", "target_path": "targets/case_003.filled.json"}
+{"input_path": "transcripts/case_004.txt", "schema_path": "schemas/lymphoma_6.json", "target_path": "targets/case_004.filled.json"}
+{"input_path": "transcripts/case_005.txt", "schema_path": "schemas/lymphoma_6.json", "target_path": "targets/case_005.filled.json"}
