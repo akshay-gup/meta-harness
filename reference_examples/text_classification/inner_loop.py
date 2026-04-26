@@ -797,6 +797,8 @@ if __name__ == "__main__":
             "accuracy": result_dict["accuracy"],
             "correct": result_dict["correct"],
             "total": result_dict["total"],
+            "avg_f1": result_dict.get("avg_f1"),
+            "micro_f1": result_dict.get("micro_f1"),
             "dataset": args.dataset,
             "memory": args.memory,
             "model": model,

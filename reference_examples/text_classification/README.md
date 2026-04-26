@@ -33,6 +33,50 @@ Print the benchmark summary:
 uv run python benchmark.py --results
 ```
 
+## Use Your Own Form-Filling Pairs
+
+This checkout is wired for a generic `FormFilling` benchmark.
+
+Replace `data/form_filling.jsonl` with your examples:
+
+```jsonl
+{"input": "raw text from your form source", "target": {"field_a": "value", "field_b": "value"}}
+{"text": "aliases also work", "output": {"field_a": "value", "field_b": "value"}}
+```
+
+For large transcripts, templates, and filled form states, keep the files
+separate and make `data/form_filling.jsonl` a manifest:
+
+```jsonl
+{"input_path": "transcripts/case_001.txt", "schema_path": "schemas/stillbirth.json", "target_path": "targets/case_001.filled.json"}
+```
+
+Paths are resolved relative to `data/form_filling.jsonl`. The schema is the
+blank input template; the target is the completed filled form state. If every
+row shares one schema, you can omit `schema_path` and update
+`data/form_schema.json` with the fields or form template instead:
+
+```json
+["field_a", "field_b"]
+```
+
+Finally, set the split sizes for `FormFilling` in `config.yaml` so
+`num_train + num_val + num_test` is no larger than your JSONL row count.
+
+The evaluator compares the predicted completed form against `target` after
+JSON parsing and whitespace normalization. A benchmark example is correct only
+when the whole form matches; field-level accuracy/F1 is also logged.
+
+Run a single baseline:
+
+```bash
+PYTHONPATH=.. uv run python -m text_classification.inner_loop \
+  --memory fewshot_all \
+  --dataset FormFilling \
+  --val-output /tmp/form_val.json \
+  --force
+```
+
 ## Layout Notes
 
 - `agents/`: the kept baselines plus the write target for generated candidates.
