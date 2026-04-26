@@ -161,9 +161,10 @@ def propose_claude(task_prompt, iteration, timeout=2400):
     saved_key = None
     if PROPOSER_BACKEND != "opencode":
         saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+    proposer_model = "default" if PROPOSER_BACKEND == "opencode" else "opus"
     result = claude_wrapper.run(
         prompt=task_prompt,
-        model="opus",
+        model=proposer_model,
         allowed_tools=PROPOSER_ALLOWED_TOOLS,
         skills=[str(EVOLVE_DIR / ".claude/skills/meta-harness")],
         cwd=str(EVOLVE_DIR),
