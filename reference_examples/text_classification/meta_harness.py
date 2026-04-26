@@ -1,7 +1,8 @@
 """Autonomous evolution loop for memory systems.
 
 Val-only during evolution (test never exposed).
-Uses claude_wrapper + meta-harness skill to propose new memory systems.
+Uses a coding-agent wrapper + meta-harness skill to propose new memory systems.
+Defaults to Claude Code; set --proposer opencode to use opencode_wrapper.
 
     uv run python meta_harness.py --iterations 20 --fresh
     uv run python meta_harness.py --iterations 10 --run-name my-run
@@ -19,8 +20,13 @@ from pathlib import Path
 
 import yaml
 
-import claude_wrapper
 from benchmark import get_model_short_name, load_results
+
+PROPOSER_BACKEND = os.environ.get("META_HARNESS_PROPOSER", "claude").lower()
+if PROPOSER_BACKEND == "opencode":
+    import opencode_wrapper as claude_wrapper
+else:
+    import claude_wrapper
 
 EVOLVE_DIR = Path(__file__).parent
 CONFIG_PATH = EVOLVE_DIR / "config.yaml"
@@ -151,15 +157,24 @@ def count_iterations_from_summary():
 def propose_claude(task_prompt, iteration, timeout=2400):
     """Returns True if candidates were produced (pending_eval.json exists)."""
     os.environ.pop("CLAUDECODE", None)
-    # Strip API key so claude CLI uses subscription auth (avoids rate limits)
-    saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+    # Strip API key only for Claude Code so it uses subscription auth.
+    saved_key = None
+    if PROPOSER_BACKEND != "opencode":
+        saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
     result = claude_wrapper.run(
         prompt=task_prompt,
         model="opus",
         allowed_tools=PROPOSER_ALLOWED_TOOLS,
         skills=[str(EVOLVE_DIR / ".claude/skills/meta-harness")],
         cwd=str(EVOLVE_DIR),
-        log_dir=str(LOGS_DIR / "claude_sessions"),
+        log_dir=str(
+            LOGS_DIR
+            / (
+                "opencode_sessions"
+                if PROPOSER_BACKEND == "opencode"
+                else "claude_sessions"
+            )
+        ),
         name=f"iter{iteration}",
         timeout_seconds=timeout,
         effort="max",
@@ -499,6 +514,8 @@ def run_evolve(args):
 
 
 def main():
+    global PROPOSER_BACKEND, claude_wrapper
+
     parser = argparse.ArgumentParser(description="Evolution loop for memory systems")
     parser.add_argument("--iterations", type=int, default=20)
     with open(CONFIG_PATH) as f:
@@ -527,7 +544,21 @@ def main():
     parser.add_argument(
         "--skip-baseline", action="store_true", help="Skip Phase 0 baseline eval"
     )
+    parser.add_argument(
+        "--proposer",
+        choices=["claude", "opencode"],
+        default=os.environ.get("META_HARNESS_PROPOSER", "claude").lower(),
+        help="Coding agent used to propose candidates (default: claude)",
+    )
     args = parser.parse_args()
+
+    if args.proposer != PROPOSER_BACKEND:
+        PROPOSER_BACKEND = args.proposer
+        if PROPOSER_BACKEND == "opencode":
+            import opencode_wrapper as _wrapper
+        else:
+            import claude_wrapper as _wrapper
+        claude_wrapper = _wrapper
 
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
