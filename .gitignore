@@ -212,6 +212,11 @@ experience/
 **/data/
 !reference_examples/text_classification/data/
 !reference_examples/text_classification/data/**
+reference_examples/text_classification/data/schemas/
+reference_examples/text_classification/data/targets/
+reference_examples/text_classification/data/transcripts/
 reference_examples/text_classification/data/**/__pycache__/
 reference_examples/text_classification/data/**/*.pyc
+reference_examples/text_classification/logs/
+reference_examples/text_classification/results/
 reference_examples/terminal_bench_2/offline_experience/
