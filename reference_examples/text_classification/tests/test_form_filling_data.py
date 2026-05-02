@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from reference_examples.text_classification.data import (
+from reference_examples.text_classification.form_filling_data import (
     _form_template_from_schema,
     _output_state_skeleton,
     check_answer,
@@ -272,7 +272,9 @@ class FormFillingDataTests(unittest.TestCase):
         self.assertEqual((len(train), len(val), len(test)), (1, 0, 0))
         example = train[0]
         self.assertIn("patient name is Jane", example["input"])
+        self.assertIn("Original form template JSON:", example["input"])
         self.assertEqual(example["fields"], ["input_name", "mcq_alpha"])
+        self.assertEqual(example["raw_form_template"], schema)
         self.assertTrue(example["schema_is_row_specific"])
         self.assertEqual(
             example["raw_input"],

@@ -516,7 +516,11 @@ def load_config() -> dict:
 if __name__ == "__main__":
     import argparse
 
-    from .data import ALL_TASKS, load_dataset_splits, load_dataset_splits_3way
+    from .form_filling_data import (
+        ALL_TASKS,
+        load_dataset_splits,
+        load_dataset_splits_3way,
+    )
 
     # Load config from YAML
     cfg = load_config()

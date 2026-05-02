@@ -1,4 +1,4 @@
-"""Dataset loading for simple input/output benchmarks.
+"""Dataset loading for the form-filling benchmark.
 
 This module provides the small interface expected by inner_loop.py:
 
@@ -869,7 +869,11 @@ def _output_state_skeleton(form_template: list[dict[str, Any]]) -> dict[str, Any
     return skeleton
 
 
-def _format_form_input(source_text: Any, form_template: list[dict[str, Any]]) -> str:
+def _format_form_input(
+    source_text: Any,
+    form_template: list[dict[str, Any]],
+    raw_form_template: Any | None = None,
+) -> str:
     if isinstance(source_text, (dict, list)):
         source_text = json.dumps(source_text, sort_keys=True, ensure_ascii=False)
     source_text = str(source_text).strip()
@@ -885,12 +889,19 @@ def _format_form_input(source_text: Any, form_template: list[dict[str, Any]]) ->
             ensure_ascii=False,
             indent=2,
         )
+        raw_template_block = ""
+        if raw_form_template is not None:
+            raw_template_block = (
+                "\n\nOriginal form template JSON:\n"
+                + json.dumps(raw_form_template, ensure_ascii=False, indent=2)
+            )
         return (
             "Fill the form from the source text.\n\n"
             "Input form template for validation:\n"
             f"{fields_block}\n\n"
             "Expected output state shape:\n"
-            f"{output_skeleton}\n\n"
+            f"{output_skeleton}"
+            f"{raw_template_block}\n\n"
             "Source text:\n"
             f"{source_text}\n\n"
             "Return the completed form state, not the input template. Fill only the "
@@ -1002,13 +1013,14 @@ def _load_jsonl_examples(dataset: str) -> list[dict[str, Any]]:
                 _template_field_from_name(field) for field in _schema_from_targets([target])
             ]
         fields = _field_names(form_template, [])
-        formatted_input = _format_form_input(raw_input, form_template)
+        formatted_input = _format_form_input(raw_input, form_template, row_schema)
         examples.append(
             {
                 "input": formatted_input,
                 "target": _target_to_text(target),
                 "fields": fields,
                 "form_template": form_template,
+                "raw_form_template": row_schema,
                 "raw_question": formatted_input if has_row_schema else str(raw_input),
                 "raw_input": raw_input,
                 "schema_is_row_specific": has_row_schema,
