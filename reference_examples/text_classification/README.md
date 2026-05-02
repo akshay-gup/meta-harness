@@ -17,6 +17,17 @@ Run one evolve iteration:
 uv run python meta_harness.py --iterations 1
 ```
 
+Run the domain launch script with OpenCode as proposer and Together DeepSeek as
+the fixed solver:
+
+```bash
+TOGETHER_API_KEY=... scripts/run_opencode_meta_harness.sh
+```
+
+The script also reads `reference_examples/text_classification/.env` if present.
+Use `RUN_NAME`, `ITERATIONS`, `PROPOSE_TIMEOUT`, `SOLVER_MODEL`, and
+`OPENCODE_WRAPPER_MODEL` to override defaults.
+
 Run one memory system on one dataset:
 
 ```bash
