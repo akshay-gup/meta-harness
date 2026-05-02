@@ -25,7 +25,10 @@ PYTHONPATH=.. uv run python -m text_classification.inner_loop \
   --dataset Symptom2Disease
 ```
 
-By default this uses the model in `config.yaml` (`openrouter/openai/gpt-oss-120b`). To target another provider or any OpenAI-compatible endpoint, override `--model` and optionally `--api-base`.
+By default this uses the model in `config.yaml`
+(`together_ai/deepseek-ai/DeepSeek-V4-Pro`). Set `TOGETHER_API_KEY` before
+running, or override `--model` and optionally `--api-base` to target another
+provider or OpenAI-compatible endpoint.
 
 Print the benchmark summary:
 
@@ -64,8 +67,8 @@ Finally, set the split sizes for `FormFilling` in `config.yaml` so
 `num_train + num_val + num_test` is no larger than your JSONL row count.
 
 The evaluator compares the predicted completed form against `target` after
-JSON parsing and whitespace normalization. A benchmark example is correct only
-when the whole form matches; field-level accuracy/F1 is also logged.
+JSON parsing and normalization. It scores field-by-field, ignores inactive
+conditional fields, and logs field-level accuracy/F1.
 
 Run a single baseline:
 
@@ -84,7 +87,12 @@ PYTHONPATH=.. uv run python -m text_classification.inner_loop \
 
 ## Runtime And Cost
 
-The release default uses OpenRouter (`openrouter/openai/gpt-oss-120b`). If you want a different provider or your own OpenAI-compatible endpoint, pass `--model` and optionally `--api-base`, or change `config.yaml`. The paper experiments used a local `vllm` deployment of `gpt-oss-120b`, MXFP4 quantized, with `max-model-len=32768`. API-backed runs may differ in quality from that setup and may be better.
+The local domain default uses Together AI
+(`together_ai/deepseek-ai/DeepSeek-V4-Pro`). If you want a different provider or
+your own OpenAI-compatible endpoint, pass `--model` and optionally `--api-base`,
+or change `config.yaml`. The paper experiments used a local `vllm` deployment of
+`gpt-oss-120b`, MXFP4 quantized, with `max-model-len=32768`. API-backed runs may
+differ in quality from that setup and may be better.
 
 ## Release Notes
 

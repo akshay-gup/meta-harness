@@ -19,10 +19,11 @@ inner_loop:
 
 # Models to test
 models:
-  - model: openrouter/openai/gpt-oss-120b
+  - model: together_ai/deepseek-ai/DeepSeek-V4-Pro
+  # Requires TOGETHER_API_KEY in the environment.
   # To use a custom OpenAI-compatible endpoint instead, switch to e.g.:
-  # - model: gpt-oss-120b
-  #   api_base: https://your-api-host/v1
+  # - model: deepseek-ai/DeepSeek-V4-Pro
+  #   api_base: https://api.together.xyz/v1
 
 # Benchmark sweep settings
 benchmark:
