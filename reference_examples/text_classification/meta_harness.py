@@ -20,7 +20,7 @@ from pathlib import Path
 
 import yaml
 
-from benchmark import get_model_short_name, load_results
+from benchmark import get_model_short_name, load_results, primary_score_percent
 
 PROPOSER_BACKEND = os.environ.get("META_HARNESS_PROPOSER", "claude").lower()
 if PROPOSER_BACKEND == "opencode":
@@ -225,11 +225,19 @@ def update_evolution_summary(
     propose_time=None,
     bench_time=None,
     wall_time=None,
+    prior_best_val=None,
 ):
     """Append one JSONL row per candidate to evolution_summary.jsonl."""
-    frontier = json.loads(FRONTIER_VAL.read_text()) if FRONTIER_VAL.exists() else {}
-    pareto = frontier.get("_pareto", [])
-    best_val = pareto[0].get("val_accuracy", 0) if pareto else 0
+    if prior_best_val is None:
+        frontier = json.loads(FRONTIER_VAL.read_text()) if FRONTIER_VAL.exists() else {}
+        pareto = frontier.get("_pareto", [])
+        best_val = (
+            pareto[0].get("score", pareto[0].get("val_accuracy", 0))
+            if pareto
+            else 0
+        )
+    else:
+        best_val = prior_best_val
 
     with open(EVOLUTION_SUMMARY, "a") as f:
         for i, c in enumerate(candidates):
@@ -344,10 +352,10 @@ def run_evolve(args):
         results = load_results(LOGS_DIR, "val.json")
         for bl in baselines:
             accs = [
-                results[k]["accuracy"] * 100
+                primary_score_percent(results[k], ds)
                 for ds in datasets
                 for k in [(model_short, ds, bl)]
-                if k in results and results[k].get("accuracy") is not None
+                if k in results and primary_score_percent(results[k], ds) is not None
             ]
             if accs:
                 avg = sum(accs) / len(accs)
@@ -366,7 +374,11 @@ def run_evolve(args):
         # Show frontier status
         frontier = json.loads(FRONTIER_VAL.read_text()) if FRONTIER_VAL.exists() else {}
         pareto = frontier.get("_pareto", [])
-        best_val = pareto[0].get("val_accuracy", 0) if pareto else 0
+        best_val = (
+            pareto[0].get("score", pareto[0].get("val_accuracy", 0))
+            if pareto
+            else 0
+        )
         best_sys = pareto[0].get("system", "none") if pareto else "none"
 
         print(
@@ -445,10 +457,10 @@ def run_evolve(args):
         for c in valid_candidates:
             name = c["name"]
             accs = [
-                results[k]["accuracy"] * 100
+                primary_score_percent(results[k], ds)
                 for ds in datasets
                 for k in [(model_short, ds, name)]
-                if k in results and results[k].get("accuracy") is not None
+                if k in results and primary_score_percent(results[k], ds) is not None
             ]
             val_scores[name] = sum(accs) / len(accs) if accs else 0
             delta = val_scores[name] - (best_val * 100 if best_val <= 1 else best_val)
@@ -470,6 +482,7 @@ def run_evolve(args):
             propose_time=propose_time,
             bench_time=bench_time,
             wall_time=wall_time,
+            prior_best_val=best_val * 100 if best_val <= 1 else best_val,
         )
 
         # Show iteration summary

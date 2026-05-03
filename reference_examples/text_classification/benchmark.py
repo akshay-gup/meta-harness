@@ -193,6 +193,26 @@ def load_results(base_dir: Path, filename: str = "val.json") -> dict:
     return results
 
 
+def primary_score_metric(dataset: str) -> str:
+    """Metric used for benchmark ranking/frontier selection."""
+    return "micro_f1" if dataset == "FormFilling" else "accuracy"
+
+
+def primary_score(data: dict, dataset: str) -> float | None:
+    """Return the dataset-specific primary score as a 0..1 value."""
+    metric = primary_score_metric(dataset)
+    score = data.get(metric)
+    if score is None and metric != "accuracy":
+        score = data.get("accuracy")
+    return score
+
+
+def primary_score_percent(data: dict, dataset: str) -> float | None:
+    """Return the dataset-specific primary score as a percentage."""
+    score = primary_score(data, dataset)
+    return None if score is None else score * 100
+
+
 # Reference results from mce_reproduce (Qwen3.5-27B, 3 datasets)
 # Context chars are avg across LawBench, Symptom2Disease, USPTO
 MCE_REF_METHODS = [
@@ -228,11 +248,11 @@ MCE_REFERENCE = {
 def compute_pareto_frontier(
     points: list[tuple[str, float, int]],
 ) -> list[tuple[str, float, int]]:
-    """Compute Pareto frontier for (name, accuracy, ctx_tokens).
+    """Compute Pareto frontier for (name, score, ctx_tokens).
 
     A point is Pareto-optimal if no other point has both
-    higher accuracy AND lower ctx_tokens (maximize accuracy, minimize tokens).
-    Returns points sorted by accuracy descending.
+    higher score AND lower ctx_tokens (maximize score, minimize tokens).
+    Returns points sorted by score descending.
     """
     sorted_points = sorted(points, key=lambda x: (-x[1], x[2]))
     pareto = []
@@ -267,6 +287,14 @@ def print_results(results: dict, metric_label: str = "val", pareto_only: bool = 
         print(f"\n{'=' * 80}")
         print(f"Model: {model_name}  [{metric_label}]")
         print("=" * 80)
+        metric_notes = {
+            ds: primary_score_metric(ds)
+            for ds in DATASETS
+            if primary_score_metric(ds) != "accuracy"
+        }
+        if metric_notes:
+            notes = ", ".join(f"{ds}={metric}" for ds, metric in metric_notes.items())
+            print(f"Primary score: {notes}")
 
         rows = []
         for mem in memory_names:
@@ -276,11 +304,11 @@ def print_results(results: dict, metric_label: str = "val", pareto_only: bool = 
             for ds in DATASETS:
                 data = results.get((model_name, ds, mem))
                 if data:
-                    acc = data.get("accuracy")
+                    acc = primary_score_percent(data, ds)
                     ctx_tokens.append(data.get("memory_context_chars", 0))
                     if acc is not None:
-                        cells.append(f"{acc * 100:.1f}")
-                        accs.append(acc * 100)
+                        cells.append(f"{acc:.1f}")
+                        accs.append(acc)
                     else:
                         cells.append("-")
                 else:
@@ -432,7 +460,7 @@ def build_val_runs(
                     desc = f"val/{dataset}/{mem_name}/{model_name}"
                     cmd = [
                         "env",
-                        "PYTHONPATH=..",
+                        "PYTHONPATH=reference_examples",
                         "uv",
                         "run",
                         "python",
@@ -519,7 +547,7 @@ def build_test_runs(
                     desc = f"test/{dataset}/{mem_name}/{model_name}"
                     cmd = [
                         "env",
-                        "PYTHONPATH=..",
+                        "PYTHONPATH=reference_examples",
                         "uv",
                         "run",
                         "python",
@@ -587,21 +615,29 @@ def print_frontier(
     # Compute best system per dataset
     by_dataset = defaultdict(list)
     for (model, dataset, memory), data in results.items():
-        acc = (data.get("accuracy") or 0) * 100
+        acc = primary_score_percent(data, dataset) or 0
         ctx_len = data.get("memory_context_chars", 0)
         by_dataset[dataset].append(
-            {"memory": memory, "accuracy": acc, "ctx_len": ctx_len}
+            {
+                "memory": memory,
+                "score": acc,
+                "accuracy": acc,
+                "metric": primary_score_metric(dataset),
+                "ctx_len": ctx_len,
+            }
         )
 
     frontier = {}
     for dataset in DATASETS:
         if dataset in by_dataset:
             best = max(
-                by_dataset[dataset], key=lambda x: (x["accuracy"], -x["ctx_len"])
+                by_dataset[dataset], key=lambda x: (x["score"], -x["ctx_len"])
             )
             frontier[dataset] = {
                 "best_system": best["memory"],
+                "score": best["score"],
                 "accuracy": best["accuracy"],
+                "metric": best["metric"],
                 "ctx_len": best["ctx_len"],
             }
 
@@ -617,16 +653,20 @@ def print_frontier(
     for dataset in DATASETS:
         if dataset in frontier:
             info = frontier[dataset]
-            acc = info["accuracy"]
+            acc = info["score"]
+            metric_name = info.get("metric", "accuracy")
             len_str = f", {info['ctx_len']:,} chars" if info["ctx_len"] > 0 else ""
-            print(f"  {dataset}: {info['best_system']} ({acc:.1f}%{len_str})")
+            print(
+                f"  {dataset}: {info['best_system']} "
+                f"({metric_name}={acc:.1f}%{len_str})"
+            )
         else:
             print(f"  {dataset}: (no results)")
 
     # Aggregate Pareto frontier
     by_memory = defaultdict(lambda: {"accs": [], "ctx_lens": []})
     for (model, dataset, memory), data in results.items():
-        acc = (data.get("accuracy") or 0) * 100
+        acc = primary_score_percent(data, dataset) or 0
         ctx_len = data.get("memory_context_chars", 0)
         by_memory[memory]["accs"].append(acc)
         by_memory[memory]["ctx_lens"].append(ctx_len)
@@ -639,8 +679,8 @@ def print_frontier(
         points.append((mem, avg_acc, avg_len))
 
     pareto = compute_pareto_frontier(points)
-    print(f"\nPARETO FRONTIER [{metric}] (accuracy vs context length):")
-    print(f"  {'system':<28} {'acc':>7} {'ctx_len':>10}")
+    print(f"\nPARETO FRONTIER [{metric}] (primary score vs context length):")
+    print(f"  {'system':<28} {'score':>7} {'ctx_len':>10}")
     print(f"  {'-' * 47}")
     for name, acc, length in pareto:
         len_str = f"{length:,}" if length > 0 else "0"
@@ -650,6 +690,7 @@ def print_frontier(
     frontier["_pareto"] = [
         {
             "system": name,
+            "score": round(acc, 1),
             "val_accuracy" if metric == "val" else "test_accuracy": round(acc, 1),
             "ctx_len": length,
         }
@@ -672,7 +713,11 @@ def update_summary(logs_dir: Path):
         if dataset not in summary:
             summary[dataset] = {}
         summary[dataset][memory] = {
+            "metric": primary_score_metric(dataset),
+            "score": primary_score(data, dataset),
             "accuracy": data.get("accuracy"),
+            "micro_f1": data.get("micro_f1"),
+            "avg_f1": data.get("avg_f1"),
             "memory_context_chars": data.get("memory_context_chars", 0),
             "model": model,
         }
