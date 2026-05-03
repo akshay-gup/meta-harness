@@ -10,7 +10,7 @@
 #   ITERATIONS=1
 #   PROPOSE_TIMEOUT=2400
 #   SOLVER_MODEL=together_ai/deepseek-ai/DeepSeek-V4-Pro
-#   OPENCODE_WRAPPER_MODEL=together/deepseek-ai/DeepSeek-V4-Pro
+#   OPENCODE_WRAPPER_MODEL=togetherai/deepseek-ai/DeepSeek-V4-Pro
 
 set -euo pipefail
 
@@ -28,7 +28,7 @@ if [[ -f ".env" ]]; then
 fi
 
 SOLVER_MODEL="${SOLVER_MODEL:-together_ai/deepseek-ai/DeepSeek-V4-Pro}"
-OPENCODE_MODEL_VALUE="${OPENCODE_WRAPPER_MODEL:-${OPENCODE_MODEL:-together/deepseek-ai/DeepSeek-V4-Pro}}"
+OPENCODE_MODEL_VALUE="${OPENCODE_WRAPPER_MODEL:-${OPENCODE_MODEL:-togetherai/deepseek-ai/DeepSeek-V4-Pro}}"
 ITERATIONS="${ITERATIONS:-1}"
 PROPOSE_TIMEOUT="${PROPOSE_TIMEOUT:-2400}"
 RUN_NAME="${RUN_NAME:-}"

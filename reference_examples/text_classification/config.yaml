@@ -1,12 +1,12 @@
 # Dataset split sizes — full datasets
 dataset:
-  num_train: 0
-  num_val: 3
-  num_test: 2
+  num_train: 2
+  num_val: 2
+  num_test: 1
   overrides:
     # Replace data/form_filling.jsonl with your own examples, then set these
     # counts to match your desired train/validation/test split.
-    FormFilling:               {num_train: 0, num_val: 3, num_test: 2}
+    FormFilling:               {num_train: 2, num_val: 2, num_test: 1}
 
 # Inner loop settings
 inner_loop:
@@ -28,7 +28,7 @@ models:
 # Benchmark sweep settings
 benchmark:
   seeds: [42]              # multi-seed: [42, 123, 456]
-  concurrency: 16
+  concurrency: 3
 
 # Datasets to test
 datasets:
