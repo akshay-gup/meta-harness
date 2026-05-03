@@ -38,4 +38,5 @@ datasets:
 memory_systems:
   baselines:
     - no_memory
+    - fewshot_all
   proposed: []  # meta_harness.py writes candidate files into agents/ at runtime
