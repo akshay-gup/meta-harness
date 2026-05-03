@@ -1116,7 +1116,6 @@ def check_answer(
         # example from field-level metrics.
         pred_form = pred_form or {}
         required_fields = _active_required_fields(target_form, fields, form_template)
-        pred_keys = set(pred_form)
         field_results = {
             key: key in pred_form
             and _values_match(pred_form[key], target_form.get(key), fields_by_name.get(key))
@@ -1132,7 +1131,10 @@ def check_answer(
             for key in required_fields
             if key in pred_form and not field_results[key]
         )
-        extra = len(pred_keys - set(required_fields))
+        # Some form schemas include conditional fields that are absent from a
+        # given target. The prompt may still show those fields in the output
+        # skeleton, so ignore predictions for fields that are not in the target.
+        extra = 0
         missing = len([key for key in required_fields if key not in pred_form])
         total_fields = len(required_fields)
         precision = (

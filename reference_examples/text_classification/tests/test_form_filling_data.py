@@ -94,13 +94,18 @@ class FormFillingDataTests(unittest.TestCase):
 
     def test_partial_targets_do_not_force_every_schema_field(self):
         result = check_answer(
-            {"Is staging evaluation of cancer done?": "No"},
+            {
+                "Is staging evaluation of cancer done?": "No",
+                "If yes method used for staging evaluation": "PET-CT",
+            },
             {"Staging": "No"},
             form_template=REALISTIC_SCHEMA,
         )
 
         self.assertTrue(result["was_correct"])
         self.assertEqual(result["metrics"]["field_results"], {"mcq_stage": True})
+        self.assertEqual(result["metrics"]["extra_fields"], 0)
+        self.assertEqual(result["metrics"]["fp"], 0)
         self.assertEqual(result["metrics"]["missing_fields"], 0)
 
     def test_empty_prediction_matches_not_specified_string_target(self):
