@@ -32,6 +32,7 @@ comparison plus field-level metrics.
 from __future__ import annotations
 
 import ast
+import difflib
 import json
 import random
 import re
@@ -229,6 +230,10 @@ def _is_empty_value(value: Any) -> bool:
     if isinstance(value, (list, tuple, set, dict)):
         return len(value) == 0
     return False
+
+
+def _is_not_specified_value(value: Any) -> bool:
+    return isinstance(value, str) and _clean_text(value).casefold() == "not specified"
 
 
 def _candidate_value_keys(item: dict[str, Any]) -> tuple[Any, bool]:
@@ -499,10 +504,21 @@ def _choice_key(value: Any) -> str:
     return _field_key(value)
 
 
+def _fuzzy_key_match(left: str, right: str, threshold: float = 0.92) -> bool:
+    """Conservative typo/spelling matcher for already-normalized short text."""
+    if left == right:
+        return True
+    if min(len(left), len(right)) < 6:
+        return False
+    return difflib.SequenceMatcher(None, left, right).ratio() >= threshold
+
+
 def _choice_matches(prediction: Any, target: Any, field: dict[str, Any]) -> bool:
     pred_key = _choice_key(prediction)
     target_key = _choice_key(target)
     if pred_key == target_key:
+        return True
+    if _fuzzy_key_match(pred_key, target_key):
         return True
     if len(pred_key) >= 3 and pred_key in target_key:
         return True
@@ -518,6 +534,12 @@ def _choice_matches(prediction: Any, target: Any, field: dict[str, Any]) -> bool
             len(target_key) >= 3 and target_key in option_key
         )
         if pred_is_option and target_is_option:
+            return True
+        if (
+            target_is_option
+            and min(len(pred_key), len(option_key)) >= 6
+            and _fuzzy_key_match(pred_key, option_key, threshold=0.9)
+        ):
             return True
     return False
 
@@ -568,6 +590,21 @@ def _parse_number_with_unit(
     return number, unit
 
 
+def _parse_numbers_with_unit(
+    value: Any, default_unit: str | None = None
+) -> list[tuple[float, str | None]]:
+    text = str(value).lower().replace(",", "")
+    matches = re.findall(
+        r"(-?\d+(?:\.\d+)?)\s*(mm|millimeters?|cm|centimeters?|m|meters?|in|inches?)?",
+        text,
+    )
+    return [(float(number), unit or default_unit) for number, unit in matches]
+
+
+def _to_cm(number: float, unit: str | None) -> float:
+    return number * _UNIT_TO_CM[unit] if unit in _UNIT_TO_CM else number
+
+
 def _numeric_values_match(
     prediction: Any, target: Any, field: dict[str, Any] | None = None
 ) -> bool:
@@ -580,11 +617,29 @@ def _numeric_values_match(
     pred_num, pred_unit = pred
     tgt_num, tgt_unit = tgt
     if pred_unit in _UNIT_TO_CM and tgt_unit in _UNIT_TO_CM:
-        pred_num *= _UNIT_TO_CM[pred_unit]
-        tgt_num *= _UNIT_TO_CM[tgt_unit]
+        pred_num = _to_cm(pred_num, pred_unit)
+        tgt_num = _to_cm(tgt_num, tgt_unit)
 
     tolerance = max(0.01, abs(tgt_num) * 0.01)
-    return abs(pred_num - tgt_num) <= tolerance
+    if abs(pred_num - tgt_num) <= tolerance:
+        return True
+
+    field_text = " ".join(
+        str(field.get(key, "")) for key in ("name", "title", "question", "instructions")
+    ).lower() if field else ""
+    if not any(token in field_text for token in ("largest", "longest", "dimension", "size")):
+        return False
+
+    pred_numbers = _parse_numbers_with_unit(prediction, default_unit)
+    target_numbers = _parse_numbers_with_unit(target, default_unit)
+    if len(pred_numbers) != 1 or len(target_numbers) < 2:
+        return False
+
+    pred_cm = _to_cm(pred_numbers[0][0], pred_numbers[0][1])
+    target_cms = [_to_cm(number, unit) for number, unit in target_numbers]
+    target_max = max(target_cms)
+    tolerance = max(0.01, abs(target_max) * 0.01)
+    return abs(pred_cm - target_max) <= tolerance
 
 
 def _values_match(
@@ -593,6 +648,10 @@ def _values_match(
     pred_norm = _normalize_form_value(prediction)
     target_norm = _normalize_form_value(target)
     if pred_norm == target_norm:
+        return True
+    if _is_empty_value(pred_norm) and _is_empty_value(target_norm):
+        return True
+    if _is_empty_value(pred_norm) and _is_not_specified_value(target_norm):
         return True
     if _is_scalar_list(pred_norm) and _is_scalar_list(target_norm):
         return sorted(_field_key(item) for item in pred_norm) == sorted(
@@ -608,7 +667,7 @@ def _values_match(
         return True
     if _numeric_values_match(pred_text, target_text, field):
         return True
-    return _field_key(pred_text) == _field_key(target_text)
+    return _fuzzy_key_match(_field_key(pred_text), _field_key(target_text))
 
 
 def _target_to_text(target: Any) -> str:
@@ -1051,7 +1110,11 @@ def check_answer(
 
     metrics: dict[str, Any] = {}
 
-    if target_form is not None and pred_form is not None:
+    if target_form is not None:
+        # If the target is a form but the prediction cannot be mapped to the
+        # schema, count the required fields as missed instead of omitting the
+        # example from field-level metrics.
+        pred_form = pred_form or {}
         required_fields = _active_required_fields(target_form, fields, form_template)
         pred_keys = set(pred_form)
         field_results = {

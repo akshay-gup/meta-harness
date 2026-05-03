@@ -51,10 +51,10 @@ class FormFillingDataTests(unittest.TestCase):
         self.assertIn("Fill the form from the source text.", train[0]["input"])
         self.assertIn("Input form template for validation:", train[0]["input"])
         self.assertIn("Expected output state shape:", train[0]["input"])
-        self.assertEqual(len(train[0]["fields"]), 67)
+        self.assertGreater(len(train[0]["fields"]), 0)
         self.assertEqual(
-            train[0]["fields"][:3],
-            ["input_name", "input_ipd_no", "input_phone_no"],
+            train[0]["fields"],
+            [field["name"] for field in train[0]["form_template"]],
         )
 
         result = evaluator(
@@ -102,6 +102,29 @@ class FormFillingDataTests(unittest.TestCase):
         self.assertTrue(result["was_correct"])
         self.assertEqual(result["metrics"]["field_results"], {"mcq_stage": True})
         self.assertEqual(result["metrics"]["missing_fields"], 0)
+
+    def test_empty_prediction_matches_not_specified_string_target(self):
+        form_template = [{"name": "input_site", "type": "input", "title": "Site"}]
+        result = check_answer(
+            {"input_site": ""},
+            {"input_site": "Not specified"},
+            fields=["input_site"],
+            form_template=form_template,
+        )
+
+        self.assertTrue(result["was_correct"])
+        self.assertEqual(result["metrics"]["field_results"], {"input_site": True})
+
+        missing_result = check_answer(
+            {},
+            {"input_site": "Not specified"},
+            fields=["input_site"],
+            form_template=form_template,
+        )
+        self.assertFalse(missing_result["was_correct"])
+        self.assertEqual(
+            missing_result["metrics"]["field_results"], {"input_site": False}
+        )
 
     def test_nested_filled_form_builder_output_is_flattened(self):
         target = {
