@@ -128,13 +128,27 @@ def run_benchmark(args):
 
 def render_task_prompt(iteration, num_datasets):
     """Build the prompt for the proposer Claude session."""
+    with open(CONFIG_PATH) as f:
+        cfg = yaml.safe_load(f)
+    ds = cfg.get("dataset", {})
+    meta = cfg.get("meta_harness", {})
+    allow_inference_only = bool(meta.get("allow_inference_only_agents", False))
     return (
         f"Run iteration {iteration} of the evolution loop. There are {num_datasets} datasets.\n\n"
+        f"## Candidate mode\n"
+        f"- Training examples per default split: {ds.get('num_train')}\n"
+        f"- Validation examples per default split: {ds.get('num_val')}\n"
+        f"- Test examples per default split: {ds.get('num_test')}\n"
+        f"- Inference-only agents allowed: {allow_inference_only}\n"
+        f"- If inference-only agents are allowed, candidates may expose a plain `predict(...)`, "
+        f"`Agent`, `Predictor`, `InferenceAgent`, or `build_agent(...)`; the harness will wrap it.\n\n"
         f"## Run directories\n"
         f"All logs and results for this run are under `{LOGS_DIR}/`.\n"
         f"- `{EVOLUTION_SUMMARY}` — past results\n"
         f"- `{FRONTIER_VAL}` — frontier\n"
         f"- `{LOGS_DIR / 'reports'}/` — post-eval reports\n"
+        f"- `{LOGS_DIR / 'reports' / 'field_diagnostics.md'}` — aggregate field-level validation failures without raw labels\n"
+        f"- `val_diagnostics.json` files next to each `val.json` — sanitized field errors without raw predictions or targets\n"
         f"- Write pending_eval.json to: `{PENDING_EVAL}`"
     )
 
@@ -154,7 +168,7 @@ def count_iterations_from_summary():
     return max_iter
 
 
-def propose_claude(task_prompt, iteration, timeout=2400):
+def propose_claude(task_prompt, iteration, timeout=2400, skill="meta-harness"):
     """Returns True if candidates were produced (pending_eval.json exists)."""
     os.environ.pop("CLAUDECODE", None)
     # Strip API key only for Claude Code so it uses subscription auth.
@@ -162,11 +176,17 @@ def propose_claude(task_prompt, iteration, timeout=2400):
     if PROPOSER_BACKEND != "opencode":
         saved_key = os.environ.pop("ANTHROPIC_API_KEY", None)
     proposer_model = "default" if PROPOSER_BACKEND == "opencode" else "opus"
+    skill_path = Path(skill)
+    if not skill_path.is_absolute():
+        skill_path = EVOLVE_DIR / ".claude/skills" / skill
+    if not skill_path.exists():
+        print(f"  {_red('proposer skill not found')}: {skill_path}")
+        return False
     result = claude_wrapper.run(
         prompt=task_prompt,
         model=proposer_model,
         allowed_tools=PROPOSER_ALLOWED_TOOLS,
-        skills=[str(EVOLVE_DIR / ".claude/skills/meta-harness")],
+        skills=[str(skill_path)],
         cwd=str(EVOLVE_DIR),
         log_dir=str(
             LOGS_DIR
@@ -199,13 +219,20 @@ def validate_candidates(candidates):
         name = c["name"]
         result = run_cmd(
             [
+                "env",
+                "PYTHONPATH=..",
                 "uv",
                 "run",
                 "python",
                 "-c",
-                f"from text_classification.agents.{name} import *; print('OK')",
+                (
+                    "from text_classification.inner_loop import load_memory_system; "
+                    "m = load_memory_system('agents/"
+                    f"{name}.py', lambda prompt: '{{}}'); "
+                    "print('OK', type(m).__name__)"
+                ),
             ],
-            cwd=str(EVOLVE_DIR.parent),
+            cwd=str(EVOLVE_DIR),
             timeout=30,
         )
         if result.returncode == 0 and "OK" in result.stdout:
@@ -327,7 +354,7 @@ def run_evolve(args):
     print(
         f"{_ts()} {_bold('Evolution (memory systems)')}  "
         f"run={_cyan(run_name)}  model={_cyan(args.model)}  "
-        f"iters={args.iterations}  datasets={datasets}"
+        f"iters={args.iterations}  skill={_cyan(args.skill)}  datasets={datasets}"
     )
 
     # ── Phase 0: Baselines ─────────────────────────────────────
@@ -395,7 +422,12 @@ def run_evolve(args):
         # Propose
         propose_start = time.time()
         print(f"  {_ts()} {_cyan('proposing')} new candidates...", flush=True)
-        ok = propose_claude(task_prompt, iteration, timeout=args.propose_timeout)
+        ok = propose_claude(
+            task_prompt,
+            iteration,
+            timeout=args.propose_timeout,
+            skill=args.skill,
+        )
         propose_time = time.time() - propose_start
 
         if not ok:
@@ -563,6 +595,18 @@ def main():
         choices=["claude", "opencode"],
         default=os.environ.get("META_HARNESS_PROPOSER", "claude").lower(),
         help="Coding agent used to propose candidates (default: claude)",
+    )
+    default_skill = os.environ.get(
+        "META_HARNESS_SKILL",
+        _cfg.get("meta_harness", {}).get("skill", "meta-harness"),
+    )
+    parser.add_argument(
+        "--skill",
+        default=default_skill,
+        help=(
+            "Proposer skill name or absolute path "
+            "(default: META_HARNESS_SKILL, config meta_harness.skill, or meta-harness)"
+        ),
     )
     args = parser.parse_args()
 

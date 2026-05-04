@@ -11,6 +11,7 @@
 #   PROPOSE_TIMEOUT=2400
 #   SOLVER_MODEL=together_ai/deepseek-ai/DeepSeek-V4-Pro
 #   OPENCODE_WRAPPER_MODEL=togetherai/deepseek-ai/DeepSeek-V4-Pro
+#   META_HARNESS_SKILL=meta-harness-no-memory
 
 set -euo pipefail
 
@@ -32,6 +33,7 @@ OPENCODE_MODEL_VALUE="${OPENCODE_WRAPPER_MODEL:-${OPENCODE_MODEL:-togetherai/dee
 ITERATIONS="${ITERATIONS:-1}"
 PROPOSE_TIMEOUT="${PROPOSE_TIMEOUT:-2400}"
 RUN_NAME="${RUN_NAME:-}"
+META_HARNESS_SKILL="${META_HARNESS_SKILL:-}"
 
 if ! command -v uv >/dev/null 2>&1; then
     echo "ERROR: uv is required but was not found on PATH." >&2
@@ -51,6 +53,9 @@ if [[ -z "${TOGETHER_API_KEY:-}" ]]; then
 fi
 
 export META_HARNESS_PROPOSER=opencode
+if [[ -n "$META_HARNESS_SKILL" ]]; then
+    export META_HARNESS_SKILL
+fi
 export OPENCODE_WRAPPER_MODEL="$OPENCODE_MODEL_VALUE"
 export OPENCODE_MODEL="$OPENCODE_MODEL_VALUE"
 
@@ -60,6 +65,11 @@ echo "opencode_model:    $OPENCODE_WRAPPER_MODEL"
 echo "solver_model:      $SOLVER_MODEL"
 echo "iterations:        $ITERATIONS"
 echo "propose_timeout:   $PROPOSE_TIMEOUT"
+if [[ -n "$META_HARNESS_SKILL" ]]; then
+    echo "skill:             $META_HARNESS_SKILL"
+else
+    echo "skill:             config default"
+fi
 if [[ -n "$RUN_NAME" ]]; then
     echo "run_name:          $RUN_NAME"
 fi
@@ -72,6 +82,10 @@ cmd=(
     --iterations "$ITERATIONS"
     --propose-timeout "$PROPOSE_TIMEOUT"
 )
+
+if [[ -n "$META_HARNESS_SKILL" ]]; then
+    cmd+=(--skill "$META_HARNESS_SKILL")
+fi
 
 if [[ -n "$RUN_NAME" ]]; then
     cmd+=(--run-name "$RUN_NAME")

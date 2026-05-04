@@ -1,12 +1,12 @@
 # Dataset split sizes — full datasets
 dataset:
-  num_train: 2
-  num_val: 2
-  num_test: 1
+  num_train: 0
+  num_val: 3
+  num_test: 2
   overrides:
     # Replace data/form_filling.jsonl with your own examples, then set these
     # counts to match your desired train/validation/test split.
-    FormFilling:               {num_train: 2, num_val: 2, num_test: 1}
+    FormFilling:               {num_train: 0, num_val: 3, num_test: 2}
 
 # Inner loop settings
 inner_loop:
@@ -30,6 +30,11 @@ benchmark:
   seeds: [42]              # multi-seed: [42, 123, 456]
   concurrency: 3
 
+# Meta-harness proposer settings
+meta_harness:
+  skill: meta-harness-no-memory
+  allow_inference_only_agents: true
+
 # Datasets to test
 datasets:
   - FormFilling
@@ -38,5 +43,4 @@ datasets:
 memory_systems:
   baselines:
     - no_memory
-    - fewshot_all
   proposed: []  # meta_harness.py writes candidate files into agents/ at runtime

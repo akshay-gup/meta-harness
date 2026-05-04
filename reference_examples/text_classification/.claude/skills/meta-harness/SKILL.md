@@ -56,6 +56,8 @@ Check the reports directory (path in the task prompt's "Run directories" section
    - `frontier_val.json` — current best per dataset (val accuracy)
    - `config.yaml` for current datasets and baselines
    - recent `logs/<dataset>/<agent>/<model>/log.jsonl` traces if they exist
+   - `reports/field_diagnostics.md` and per-agent `val_diagnostics.json` files
+     for sanitized field-level validation failures
 
 2. Formulate 3 hypotheses — each must be falsifiable and target a different mechanism.
 
@@ -124,6 +126,8 @@ class MemorySystem(ABC):
 ## Directory Structure
 
 - Val results: `logs/<dataset>/<memory>/<model>/val.json` (accuracy field)
+- Val diagnostics: `logs/<dataset>/<memory>/<model>/val_diagnostics.json` (sanitized field-level errors; no raw predictions or targets)
+- Aggregate diagnostics report: `reports/field_diagnostics.md`
 - Training logs: `logs/<dataset>/<memory>/<model>/log.jsonl`
 - Memory state: `logs/<dataset>/<memory>/<model>/memory.json`
 - Test results: `results/<dataset>/<memory>/<model>/test.json` (separate dir, never exposed during evolution)

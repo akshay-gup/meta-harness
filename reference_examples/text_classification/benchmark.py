@@ -724,6 +724,93 @@ def update_summary(logs_dir: Path):
 
     summary_path = logs_dir / "summary.json"
     summary_path.write_text(json.dumps(summary, indent=2))
+    update_field_diagnostics_report(logs_dir)
+
+
+def _format_counts(counts: dict, limit: int = 5) -> str:
+    if not counts:
+        return "-"
+    return ", ".join(
+        f"{name}:{count}" for name, count in list(counts.items())[:limit]
+    )
+
+
+def update_field_diagnostics_report(logs_dir: Path):
+    """Write aggregate field-level val diagnostics for the proposer."""
+    diagnostics_paths = sorted(logs_dir.rglob("val_diagnostics.json"))
+    if not diagnostics_paths:
+        return
+
+    rows = []
+    for path in diagnostics_paths:
+        try:
+            data = json.loads(path.read_text())
+        except json.JSONDecodeError:
+            continue
+        rel = path.relative_to(logs_dir)
+        if len(rel.parts) < 4:
+            continue
+        dataset, memory, model = rel.parts[:3]
+        summary = data.get("summary", {})
+        metrics_line = {
+            "dataset": dataset,
+            "memory": memory,
+            "model": model,
+            "micro_f1": summary.get("micro_f1"),
+            "avg_f1": summary.get("avg_f1"),
+            "accuracy": summary.get("accuracy"),
+            "correct": summary.get("correct"),
+            "total": summary.get("total"),
+            "diagnostics": str(rel),
+            "error_kind_counts": data.get("error_kind_counts", {}),
+            "field_error_counts": data.get("field_error_counts", {}),
+        }
+        rows.append(metrics_line)
+
+    if not rows:
+        return
+
+    rows.sort(
+        key=lambda row: (
+            row["micro_f1"] if row["micro_f1"] is not None else row["accuracy"] or 0,
+            -(row["avg_f1"] or 0),
+        ),
+        reverse=True,
+    )
+
+    lines = [
+        "# Field Diagnostics",
+        "",
+        "Sanitized validation field-level diagnostics generated from `val_diagnostics.json`.",
+        "Use this report to identify recurring field failures before proposing new memory systems.",
+        "",
+        "| dataset | memory | micro_f1 | avg_f1 | top error kinds | top wrong fields | diagnostics |",
+        "| --- | --- | ---: | ---: | --- | --- | --- |",
+    ]
+    for row in rows:
+        micro = row["micro_f1"]
+        avg = row["avg_f1"]
+        micro_s = "-" if micro is None else f"{micro * 100:.1f}%"
+        avg_s = "-" if avg is None else f"{avg * 100:.1f}%"
+        lines.append(
+            "| "
+            + " | ".join(
+                [
+                    row["dataset"],
+                    row["memory"],
+                    micro_s,
+                    avg_s,
+                    _format_counts(row["error_kind_counts"]),
+                    _format_counts(row["field_error_counts"]),
+                    f"`{row['diagnostics']}`",
+                ]
+            )
+            + " |"
+        )
+
+    reports_dir = logs_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "field_diagnostics.md").write_text("\n".join(lines) + "\n")
 
 
 def print_summary(logs_dir: Path, results_dir: Path):

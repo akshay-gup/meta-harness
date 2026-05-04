@@ -3,6 +3,7 @@
 import json
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -103,6 +104,182 @@ def make_result(preds: list[dict]) -> dict:
         result["avg_f1"] = None
         result["micro_f1"] = None
     return result
+
+
+def _json_loads_maybe(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError:
+        return value
+
+
+def _field_title(field: dict[str, Any] | None, fallback: str) -> str:
+    if not field:
+        return fallback
+    return (
+        field.get("title")
+        or field.get("question")
+        or field.get("label")
+        or field.get("name")
+        or fallback
+    )
+
+
+def _field_type(field: dict[str, Any] | None) -> str:
+    if not field:
+        return "unknown"
+    return field.get("component") or field.get("type") or "unknown"
+
+
+def _diagnostic_error_kind(
+    field: dict[str, Any] | None,
+    predicted_value: Any,
+    target_value: Any,
+    is_missing: bool,
+) -> str:
+    try:
+        from .form_filling_data import _is_empty_value
+    except Exception:
+        _is_empty_value = lambda value: value in ("", None, [], {})  # noqa: E731
+
+    if is_missing:
+        return "missing_prediction"
+    pred_empty = _is_empty_value(predicted_value)
+    target_empty = _is_empty_value(target_value)
+    if pred_empty and not target_empty:
+        return "empty_prediction"
+    if not pred_empty and target_empty:
+        return "predicted_when_target_empty"
+    if _field_type(field) == "FormMCQField" or (field or {}).get("type") == "mcq":
+        return "wrong_choice"
+    return "wrong_text_or_number"
+
+
+def build_field_diagnostics(
+    result: dict[str, Any],
+    predictions: list[dict[str, Any]],
+    examples: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Build local field-level diagnostics for validation/test outputs.
+
+    This intentionally avoids storing raw prediction/target values or source
+    text. The proposer should see recurring failure patterns, not validation
+    answers it can memorize.
+    """
+    error_kind_counts: Counter[str] = Counter()
+    field_error_counts: Counter[str] = Counter()
+    field_breakdowns: dict[str, dict[str, Any]] = {}
+
+    try:
+        from .form_filling_data import (
+            _coerce_form_dict,
+            _field_by_name,
+            _is_empty_value,
+        )
+    except Exception:
+        _coerce_form_dict = None
+        _field_by_name = None
+        _is_empty_value = lambda value: value in ("", None, [], {})  # noqa: E731
+
+    for prediction, example in zip(predictions, examples):
+        metrics = prediction.get("metrics", {})
+        field_results = metrics.get("field_results") or {}
+        form_template = example.get("form_template") or []
+        fields = example.get("fields") or []
+        fields_by_name = _field_by_name(form_template) if _field_by_name else {}
+        pred_form = None
+        target_form = None
+        if _coerce_form_dict:
+            pred_form = _coerce_form_dict(
+                prediction.get("prediction"), fields, form_template
+            )
+            target_form = _coerce_form_dict(
+                prediction.get("target"), fields, form_template
+            )
+        if pred_form is None:
+            pred_form = _json_loads_maybe(prediction.get("prediction"))
+        if target_form is None:
+            target_form = _json_loads_maybe(prediction.get("target"))
+        if not isinstance(pred_form, dict):
+            pred_form = {}
+        if not isinstance(target_form, dict):
+            target_form = {}
+
+        for field_name, was_field_correct in field_results.items():
+            if was_field_correct:
+                continue
+            field = fields_by_name.get(field_name, {})
+            is_missing = field_name not in pred_form
+            predicted_value = pred_form.get(field_name)
+            target_value = target_form.get(field_name)
+            pred_empty = _is_empty_value(predicted_value)
+            target_empty = _is_empty_value(target_value)
+            error_kind = _diagnostic_error_kind(
+                field, predicted_value, target_value, is_missing
+            )
+            title = _field_title(field, field_name)
+            error_kind_counts[error_kind] += 1
+            field_error_counts[title] += 1
+            field_breakdown = field_breakdowns.setdefault(
+                field_name,
+                {
+                    "field": field_name,
+                    "title": title,
+                    "type": _field_type(field),
+                    "condition": field.get("condition"),
+                    "total_errors": 0,
+                    "error_kind_counts": Counter(),
+                    "prediction_empty_counts": Counter(),
+                    "target_empty_counts": Counter(),
+                    "prediction_type_counts": Counter(),
+                    "target_type_counts": Counter(),
+                },
+            )
+            field_breakdown["total_errors"] += 1
+            field_breakdown["error_kind_counts"][error_kind] += 1
+            field_breakdown["prediction_empty_counts"][str(pred_empty).lower()] += 1
+            field_breakdown["target_empty_counts"][str(target_empty).lower()] += 1
+            field_breakdown["prediction_type_counts"][
+                type(predicted_value).__name__
+            ] += 1
+            field_breakdown["target_type_counts"][type(target_value).__name__] += 1
+
+    fields = []
+    for field in field_breakdowns.values():
+        fields.append(
+            {
+                **{
+                    key: value
+                    for key, value in field.items()
+                    if not isinstance(value, Counter)
+                },
+                "error_kind_counts": dict(
+                    field["error_kind_counts"].most_common()
+                ),
+                "prediction_empty_counts": dict(
+                    field["prediction_empty_counts"].most_common()
+                ),
+                "target_empty_counts": dict(
+                    field["target_empty_counts"].most_common()
+                ),
+                "prediction_type_counts": dict(
+                    field["prediction_type_counts"].most_common()
+                ),
+                "target_type_counts": dict(
+                    field["target_type_counts"].most_common()
+                ),
+            }
+        )
+    fields.sort(key=lambda item: item["total_errors"], reverse=True)
+
+    return {
+        "summary": result,
+        "error_kind_counts": dict(error_kind_counts.most_common()),
+        "field_error_counts": dict(field_error_counts.most_common()),
+        "fields": fields,
+    }
 
 
 def _run_offline_loop(
@@ -483,6 +660,13 @@ def load_memory_system(path: str, llm) -> MemorySystem:
     - 'agents/no_memory.py'
     - 'agents/my_candidate.py'
     - 'no_memory' (searches built-in and generated agents)
+
+    Inference-only agent files are also accepted. They do not need to subclass
+    MemorySystem if they expose one of:
+    - predict(input)
+    - predict(input, call_llm)
+    - Agent/Predictor/InferenceAgent class with predict(...)
+    - build_agent(...) returning an object/function with predict(...)
     """
     import importlib
     import inspect
@@ -501,7 +685,101 @@ def load_memory_system(path: str, llm) -> MemorySystem:
         if issubclass(obj, MemorySystem) and obj is not MemorySystem:
             return obj(llm=llm)
 
-    raise ValueError(f"No MemorySystem subclass found in {path}")
+    if hasattr(module, "build_agent"):
+        return InferenceOnlyAdapter(llm=llm, target=module.build_agent)
+
+    for attr in ("Agent", "Predictor", "InferenceAgent"):
+        obj = getattr(module, attr, None)
+        if obj is not None:
+            return InferenceOnlyAdapter(llm=llm, target=obj)
+
+    if hasattr(module, "predict"):
+        return InferenceOnlyAdapter(llm=llm, target=module.predict)
+
+    raise ValueError(
+        f"No MemorySystem subclass or inference-only predictor found in {path}"
+    )
+
+
+class InferenceOnlyAdapter(MemorySystem):
+    """Wrap a plain inference-only predictor in the MemorySystem runtime API."""
+
+    def __init__(self, llm, target):
+        super().__init__(llm)
+        self._target = self._initialize_target(target)
+
+    def _initialize_target(self, target):
+        import inspect
+
+        if not inspect.isclass(target):
+            if callable(target) and getattr(target, "__name__", "") == "build_agent":
+                return self._call_with_optional_llm(target)
+            return target
+        return self._call_with_optional_llm(target)
+
+    def _call_with_optional_llm(self, fn, *args):
+        import inspect
+
+        try:
+            sig = inspect.signature(fn)
+        except (TypeError, ValueError):
+            return fn(*args)
+        params = sig.parameters
+        if "call_llm" in params:
+            return fn(*args, call_llm=self.call_llm)
+        if "llm" in params:
+            return fn(*args, llm=self.call_llm)
+        try:
+            return fn(*args, self.call_llm)
+        except TypeError:
+            return fn(*args)
+
+    def _invoke_predict(self, input_text: str):
+        predictor = self._target
+        if hasattr(predictor, "predict"):
+            fn = predictor.predict
+        elif callable(predictor):
+            fn = predictor
+        else:
+            raise TypeError("Inference-only target must be callable or expose predict()")
+        return self._call_with_optional_llm(fn, input_text)
+
+    def predict(self, input: str) -> tuple[str, dict[str, Any]]:
+        result = self._invoke_predict(input)
+        if isinstance(result, tuple) and len(result) == 2:
+            prediction, metadata = result
+            return self._prediction_to_text(prediction), metadata or {
+                "interface": "inference_only"
+            }
+        return self._prediction_to_text(result), {"interface": "inference_only"}
+
+    def _prediction_to_text(self, prediction) -> str:
+        if isinstance(prediction, (dict, list)):
+            return json.dumps(prediction, ensure_ascii=False)
+        return str(prediction)
+
+    def learn_from_batch(self, batch_results: list[dict[str, Any]]) -> None:
+        learn = getattr(self._target, "learn_from_batch", None)
+        if callable(learn):
+            learn(batch_results)
+
+    def get_context_length(self) -> int:
+        get_context_length = getattr(self._target, "get_context_length", None)
+        if callable(get_context_length):
+            return int(get_context_length())
+        return len(self.get_state())
+
+    def get_state(self) -> str:
+        get_state = getattr(self._target, "get_state", None)
+        if callable(get_state):
+            state = get_state()
+            return state if isinstance(state, str) else json.dumps(state)
+        return "{}"
+
+    def set_state(self, state: str) -> None:
+        set_state = getattr(self._target, "set_state", None)
+        if callable(set_state):
+            set_state(state)
 
 
 def load_config() -> dict:
@@ -819,13 +1097,35 @@ if __name__ == "__main__":
         }
 
     if args.val_output and val_result:
-        Path(args.val_output).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.val_output, "w") as f:
-            json.dump(_build_output(val_result), f, indent=2)
+        output_path = Path(args.val_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output = _build_output(val_result)
+        with open(output_path, "w") as f:
+            json.dump(output, f, indent=2)
+        diagnostics_path = output_path.with_name("val_diagnostics.json")
+        with open(diagnostics_path, "w") as f:
+            json.dump(
+                build_field_diagnostics(output, val_preds, val_examples),
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
         print(f"Saved val results to {args.val_output}", flush=True)
+        print(f"Saved val diagnostics to {diagnostics_path}", flush=True)
 
     if args.test_output and test_result:
-        Path(args.test_output).parent.mkdir(parents=True, exist_ok=True)
-        with open(args.test_output, "w") as f:
-            json.dump(_build_output(test_result), f, indent=2)
+        output_path = Path(args.test_output)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output = _build_output(test_result)
+        with open(output_path, "w") as f:
+            json.dump(output, f, indent=2)
+        diagnostics_path = output_path.with_name("test_diagnostics.json")
+        with open(diagnostics_path, "w") as f:
+            json.dump(
+                build_field_diagnostics(output, test_preds, test_examples),
+                f,
+                indent=2,
+                ensure_ascii=False,
+            )
         print(f"Saved test results to {args.test_output}", flush=True)
+        print(f"Saved test diagnostics to {diagnostics_path}", flush=True)

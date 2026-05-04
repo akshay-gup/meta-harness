@@ -9,6 +9,7 @@ from reference_examples.text_classification.form_filling_data import (
     check_answer,
     load_dataset_splits_3way,
 )
+from reference_examples.text_classification.inner_loop import build_field_diagnostics
 
 
 REALISTIC_SCHEMA = [
@@ -107,6 +108,46 @@ class FormFillingDataTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["extra_fields"], 0)
         self.assertEqual(result["metrics"]["fp"], 0)
         self.assertEqual(result["metrics"]["missing_fields"], 0)
+
+    def test_build_field_diagnostics_records_field_errors(self):
+        prediction = {"mcq_stage": {"answer": "Yes"}}
+        target = {"mcq_stage": {"answer": "No"}}
+        score = check_answer(
+            prediction,
+            target,
+            form_template=REALISTIC_SCHEMA,
+        )
+
+        diagnostics = build_field_diagnostics(
+            {"micro_f1": 0.0, "avg_f1": 0.0, "accuracy": 0.0},
+            [
+                {
+                    "prediction": json.dumps(prediction),
+                    "target": json.dumps(target),
+                    "was_correct": False,
+                    "metrics": score["metrics"],
+                }
+            ],
+            [
+                {
+                    "fields": ["mcq_stage", "mcq_stage_method"],
+                    "form_template": REALISTIC_SCHEMA,
+                }
+            ],
+        )
+
+        self.assertEqual(diagnostics["error_kind_counts"], {"wrong_choice": 1})
+        self.assertEqual(diagnostics["field_error_counts"], {"Staging": 1})
+        self.assertNotIn("examples", diagnostics)
+        field_error = diagnostics["fields"][0]
+        self.assertEqual(field_error["field"], "mcq_stage")
+        self.assertEqual(field_error["title"], "Staging")
+        self.assertEqual(field_error["prediction_empty_counts"], {"false": 1})
+        self.assertEqual(field_error["target_empty_counts"], {"false": 1})
+        self.assertEqual(field_error["prediction_type_counts"], {"str": 1})
+        self.assertEqual(field_error["target_type_counts"], {"str": 1})
+        self.assertNotIn("prediction", field_error)
+        self.assertNotIn("target", field_error)
 
     def test_empty_prediction_matches_not_specified_string_target(self):
         form_template = [{"name": "input_site", "type": "input", "title": "Site"}]
