@@ -31,7 +31,13 @@ else:
 EVOLVE_DIR = Path(__file__).parent
 CONFIG_PATH = EVOLVE_DIR / "config.yaml"
 AGENTS_DIR = EVOLVE_DIR / "agents"
-BASELINE_FILES = {"__init__.py", "no_memory.py", "fewshot_memory.py", "fewshot_all.py"}
+BASELINE_FILES = {
+    "__init__.py",
+    "field_by_field.py",
+    "no_memory.py",
+    "fewshot_memory.py",
+    "fewshot_all.py",
+}
 
 # These are updated per-run if --run-name is set
 LOGS_DIR = EVOLVE_DIR / "logs"

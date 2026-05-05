@@ -42,5 +42,5 @@ datasets:
 # Memory systems to test
 memory_systems:
   baselines:
-    - no_memory
+    - field_by_field
   proposed: []  # meta_harness.py writes candidate files into agents/ at runtime
