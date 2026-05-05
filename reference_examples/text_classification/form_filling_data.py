@@ -994,6 +994,12 @@ def _condition_is_met(
     return True
 
 
+def _is_choice_field(field: dict[str, Any]) -> bool:
+    return field.get("component") in {"FormMCQField", "FormSelectField"} or field.get(
+        "type"
+    ) in {"mcq", "select"}
+
+
 def _active_required_fields(
     target_form: dict[str, Any],
     fields: list[str],
@@ -1015,6 +1021,8 @@ def _active_required_fields(
             if _is_empty_value(target_form.get(name)):
                 continue
         if name not in target_form:
+            continue
+        if _is_choice_field(field) and _is_empty_value(target_form.get(name)):
             continue
         active.append(name)
     return active

@@ -109,6 +109,45 @@ class FormFillingDataTests(unittest.TestCase):
         self.assertEqual(result["metrics"]["fp"], 0)
         self.assertEqual(result["metrics"]["missing_fields"], 0)
 
+    def test_empty_mcq_target_is_not_scored(self):
+        result = check_answer(
+            {"mcq_stage": {"answer": "Yes"}},
+            {"mcq_stage": {"answer": ""}},
+            fields=["mcq_stage"],
+            form_template=REALISTIC_SCHEMA,
+        )
+
+        self.assertTrue(result["was_correct"])
+        self.assertEqual(result["metrics"]["total_fields"], 0)
+        self.assertEqual(result["metrics"]["correct_fields"], 0)
+        self.assertEqual(result["metrics"]["field_results"], {})
+        self.assertEqual(result["metrics"]["fp"], 0)
+        self.assertEqual(result["metrics"]["fn"], 0)
+
+    def test_empty_select_target_is_not_scored(self):
+        form_template = [
+            {
+                "component": "FormSelectField",
+                "title": "Mother referred",
+                "name": "select_mother_referred",
+                "type": "select",
+                "options": ["Yes", "No"],
+            }
+        ]
+
+        result = check_answer(
+            {"select_mother_referred": "Yes"},
+            {"select_mother_referred": ""},
+            fields=["select_mother_referred"],
+            form_template=form_template,
+        )
+
+        self.assertTrue(result["was_correct"])
+        self.assertEqual(result["metrics"]["total_fields"], 0)
+        self.assertEqual(result["metrics"]["field_results"], {})
+        self.assertEqual(result["metrics"]["fp"], 0)
+        self.assertEqual(result["metrics"]["fn"], 0)
+
     def test_build_field_diagnostics_records_field_errors(self):
         prediction = {"mcq_stage": {"answer": "Yes"}}
         target = {"mcq_stage": {"answer": "No"}}
